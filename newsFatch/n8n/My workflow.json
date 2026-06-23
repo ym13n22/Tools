@@ -1,0 +1,489 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e65b7ba5-d504-483e-9750-10823a3c2242",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.rssUrl }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        272
+      ],
+      "id": "fd65c6e5-bd93-41b9-b554-c289e63e655e",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        608,
+        336
+      ],
+      "id": "83b4891c-4096-454f-9c2a-2da26f9fe8fa",
+      "name": "XML"
+    },
+    {
+      "parameters": {
+        "url": "=https://r.jina.ai/http://{{$json.link}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1248,
+        576
+      ],
+      "id": "409a138f-0e0b-4050-a170-59b7ce6d3021",
+      "name": "HTTP Request2",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, index) => {\n  const sanitizeText = (value) => {\n    return String(value ?? '')\n      .replace(/[“”]/g, '\"')\n      .replace(/[‘’]/g, \"'\")\n      .replace(/[＂]/g, '\"')\n      .replace(/[＇]/g, \"'\")\n      .replace(/[「」]/g, '\"')\n      .replace(/[『』]/g, '\"')\n      .replace(/[‚‛]/g, \"'\")\n      .replace(/[„‟]/g, '\"')\n      .replace(/\\u00A0/g, ' ')\n      .replace(/\\u2028/g, ' ')\n      .replace(/\\u2029/g, ' ')\n      .replace(/\\r\\n/g, '\\n')\n      .replace(/\\r/g, '\\n')\n      .trim();\n  };\n\n  const stripHtml = (html) => {\n    return sanitizeText(html)\n      .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n      .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n      .replace(/<noscript[\\s\\S]*?<\\/noscript>/gi, ' ')\n      .replace(/<[^>]*>/g, ' ')\n      .replace(/&nbsp;/g, ' ')\n      .replace(/&amp;/g, '&')\n      .replace(/&lt;/g, '<')\n      .replace(/&gt;/g, '>')\n      .replace(/&quot;/g, '\"')\n      .replace(/&#34;/g, '\"')\n      .replace(/&#39;/g, \"'\")\n      .replace(/&apos;/g, \"'\")\n      .replace(/\\s+/g, ' ')\n      .trim();\n  };\n\n  const firstText = (...values) => {\n    for (const value of values) {\n      const text = sanitizeText(value);\n      if (text) return text;\n    }\n    return '';\n  };\n\n  const firstValue = (...values) => {\n    for (const value of values) {\n      if (value !== undefined && value !== null && value !== '') return value;\n    }\n    return '';\n  };\n\n  const toBool = (value) => {\n    if (value === true) return true;\n    if (value === false) return false;\n    if (String(value).toLowerCase() === 'true') return true;\n    if (String(value).toLowerCase() === 'false') return false;\n    return Boolean(value);\n  };\n\n  const sourceFromUrl = (url) => {\n    const text = String(url || '').toLowerCase();\n\n    if (text.includes('openai.com')) return 'OpenAI';\n    if (text.includes('anthropic.com')) return 'Anthropic';\n    if (text.includes('deepmind')) return 'Google DeepMind';\n    if (text.includes('google')) return 'Google';\n    if (text.includes('microsoft.com')) return 'Microsoft';\n    if (text.includes('github.com')) return 'GitHub';\n    if (text.includes('huggingface.co')) return 'Hugging Face';\n    if (text.includes('nvidia.com')) return 'NVIDIA';\n    if (text.includes('marktechpost.com')) return 'MarkTechPost';\n    if (text.includes('vercel.com')) return 'Vercel';\n    if (text.includes('sakana.ai')) return 'Sakana AI';\n\n    return '';\n  };\n\n  const makeArticleId = (data, fallbackIndex) => {\n    const base =\n      data.article_id ||\n      data.guid ||\n      data.id ||\n      data.link ||\n      data.url ||\n      data.rssUrl ||\n      data.title ||\n      'article_' + fallbackIndex;\n\n    return String(base)\n      .trim()\n      .toLowerCase()\n      .replace(/[?#].*$/, '')\n      .replace(/\\/$/, '');\n  };\n\n  const current = item.json || {};\n\n  let original = {};\n  let pmItem = {};\n\n  try {\n    original = $('Code').all()[index]?.json || {};\n  } catch (e) {\n    original = {};\n  }\n\n  try {\n    pmItem = $('Code in JavaScript6').all()[index]?.json || {};\n  } catch (e) {\n    pmItem = {};\n  }\n\n  const merged = {\n    ...original,\n    ...pmItem,\n    ...current\n  };\n\n  const html =\n    current.data ||\n    current.body ||\n    current.html ||\n    current.response ||\n    current.content ||\n    current.result ||\n    merged.data ||\n    merged.body ||\n    merged.html ||\n    merged.response ||\n    merged.content ||\n    merged.result ||\n    '';\n\n  const text = sanitizeText(stripHtml(html)).slice(0, 12000);\n\n  const title = firstText(\n    current.title,\n    current.name,\n    current.headline,\n    merged.title,\n    merged.name,\n    merged.headline,\n    pmItem.title,\n    original.title\n  );\n\n  const description = firstText(\n    current.description,\n    current.summary,\n    current.excerpt,\n    merged.description,\n    merged.summary,\n    merged.excerpt,\n    pmItem.description,\n    pmItem.summary,\n    original.description,\n    original.summary\n  );\n\n  const link = firstText(\n    current.link,\n    current.url,\n    current.href,\n    merged.link,\n    merged.url,\n    merged.href,\n    pmItem.link,\n    pmItem.url,\n    original.link,\n    original.url\n  );\n\n  const rssUrl = firstText(\n    current.rssUrl,\n    current.rss_url,\n    current.feedUrl,\n    current.feed_url,\n    merged.rssUrl,\n    merged.rss_url,\n    merged.feedUrl,\n    merged.feed_url,\n    pmItem.rssUrl,\n    pmItem.rss_url,\n    pmItem.feedUrl,\n    pmItem.feed_url,\n    original.rssUrl,\n    original.rss_url,\n    original.feedUrl,\n    original.feed_url\n  );\n\n  const pubDate = firstText(\n    current.pubDate,\n    current.published,\n    current.updated,\n    current.isoDate,\n    merged.pubDate,\n    merged.published,\n    merged.updated,\n    merged.isoDate,\n    pmItem.pubDate,\n    pmItem.published,\n    pmItem.updated,\n    pmItem.isoDate,\n    original.pubDate,\n    original.published,\n    original.updated,\n    original.isoDate\n  );\n\n  const source = firstText(\n    current.source,\n    current.feed_source,\n    current.feedTitle,\n    current.publisher,\n    current.site_name,\n\n    sourceFromUrl(current.link || current.url || current.href),\n    sourceFromUrl(current.rssUrl || current.rss_url || current.feedUrl || current.feed_url),\n\n    merged.source,\n    merged.feed_source,\n    merged.feedTitle,\n    merged.publisher,\n    merged.site_name,\n\n    sourceFromUrl(link),\n    sourceFromUrl(rssUrl),\n\n    pmItem.source,\n    pmItem.feed_source,\n    pmItem.feedTitle,\n    pmItem.publisher,\n    pmItem.site_name,\n\n    original.source,\n    original.feed_source,\n    original.feedTitle,\n    original.publisher,\n    original.site_name\n  );\n\n  const category = firstText(\n    current.category,\n    current.categories,\n    merged.category,\n    merged.categories,\n    pmItem.category,\n    pmItem.categories,\n    original.category,\n    original.categories\n  );\n\n  const pm_score = firstValue(\n    current.pm_score,\n    current.pmScore,\n    current.score,\n    current.importance_score,\n    merged.pm_score,\n    merged.pmScore,\n    merged.score,\n    merged.importance_score,\n    pmItem.pm_score,\n    pmItem.pmScore,\n    pmItem.score,\n    pmItem.importance_score,\n    original.pm_score,\n    original.pmScore,\n    original.score,\n    original.importance_score\n  );\n\n  const pm_reason = firstText(\n    current.pm_reason,\n    current.pmReason,\n    current.reason,\n    current.importance_reason,\n    merged.pm_reason,\n    merged.pmReason,\n    merged.reason,\n    merged.importance_reason,\n    pmItem.pm_reason,\n    pmItem.pmReason,\n    pmItem.reason,\n    pmItem.importance_reason,\n    original.pm_reason,\n    original.pmReason,\n    original.reason,\n    original.importance_reason\n  );\n\n  const pm_action = firstText(\n    current.pm_action,\n    current.pmAction,\n    current.action,\n    current.reason_to_skip_or_read,\n    merged.pm_action,\n    merged.pmAction,\n    merged.action,\n    merged.reason_to_skip_or_read,\n    pmItem.pm_action,\n    pmItem.pmAction,\n    pmItem.action,\n    pmItem.reason_to_skip_or_read,\n    original.pm_action,\n    original.pmAction,\n    original.action,\n    original.reason_to_skip_or_read\n  );\n\n  const should_deep_analyze = toBool(\n    firstValue(\n      current.should_deep_analyze,\n      merged.should_deep_analyze,\n      pmItem.should_deep_analyze,\n      original.should_deep_analyze,\n      Number(pm_score || 0) >= 3\n    )\n  );\n\n  const article_id = makeArticleId(\n    {\n      ...merged,\n      ...current,\n      title,\n      link,\n      rssUrl\n    },\n    index\n  );\n\n  const stage2FormatSchema = {\n    type: 'object',\n    properties: {\n      analysis_meta: {\n        type: 'object',\n        properties: {\n          analysis_fit: {\n            type: 'string',\n            enum: ['high', 'medium', 'low']\n          },\n          evidence_level: {\n            type: 'string',\n            enum: ['高', '中', '低']\n          },\n          data_quality: {\n            type: 'string'\n          },\n          one_sentence_judgment: {\n            type: 'string'\n          },\n          summary_cn: {\n            type: 'string'\n          },\n          should_be_main_report: {\n            type: 'boolean'\n          },\n          reason_if_not_main_report: {\n            type: 'string'\n          }\n        },\n        required: [\n          'analysis_fit',\n          'evidence_level',\n          'data_quality',\n          'one_sentence_judgment',\n          'summary_cn',\n          'should_be_main_report',\n          'reason_if_not_main_report'\n        ]\n      },\n      narrative_report: {\n        type: 'object',\n        properties: {\n          overview: {\n            type: 'string'\n          },\n          why_it_matters: {\n            type: 'string'\n          },\n          product_implication: {\n            type: 'string'\n          },\n          business_or_strategy_signal: {\n            type: 'string'\n          },\n          risk_and_limits: {\n            type: 'string'\n          },\n          pm_takeaway: {\n            type: 'string'\n          },\n          caution: {\n            type: 'string'\n          }\n        },\n        required: [\n          'overview',\n          'why_it_matters',\n          'product_implication',\n          'business_or_strategy_signal',\n          'risk_and_limits',\n          'pm_takeaway',\n          'caution'\n        ]\n      },\n      compact_signals: {\n        type: 'object',\n        properties: {\n          product_signal: {\n            type: 'string'\n          },\n          competitive_signal: {\n            type: 'string'\n          },\n          enterprise_adoption_signal: {\n            type: 'string'\n          },\n          agent_or_workflow_signal: {\n            type: 'string'\n          },\n          pricing_or_distribution_signal: {\n            type: 'string'\n          }\n        },\n        required: [\n          'product_signal',\n          'competitive_signal',\n          'enterprise_adoption_signal',\n          'agent_or_workflow_signal',\n          'pricing_or_distribution_signal'\n        ]\n      },\n      pm_actions: {\n        type: 'array',\n        items: {\n          type: 'string'\n        },\n        minItems: 2\n      },\n      what_to_watch: {\n        type: 'array',\n        items: {\n          type: 'string'\n        },\n        minItems: 3\n      }\n    },\n    required: [\n      'analysis_meta',\n      'narrative_report',\n      'compact_signals',\n      'pm_actions',\n      'what_to_watch'\n    ]\n  };\n\n  let prompt_stage2 = `\n/no_think\n\n你是 AI 产品经理和企业 AI 落地分析师。\n\n任务：\n基于给定的 RSS 摘要和文章正文，生成一份面向 AI 产品经理的中文深度分析。\n\n硬性规则：\n1. 只使用输入材料中的信息，不要补充正文之外的背景知识。\n2. 不要把普通客户案例、课程、品牌宣传、普通合作新闻夸大成战略事件。\n3. 如果正文没有披露某项信息，必须写“正文未披露”。\n4. 如果标题、摘要、正文、链接明显不一致，必须在 data_quality 和 caution 中说明。\n5. 所有推断必须写成“基于正文可推断……”，不要写成确定事实。\n6. 只输出合法 JSON，不要 Markdown，不要代码块，不要解释。\n7. 字段名必须使用英文，字段值必须使用简体中文。\n8. 不要输出英文句子，专有名词如 OpenAI、API、SDK、Agent、Workflow、Copilot 可以保留。\n9. 每个字段都必须有内容，不允许空字符串。\n10. 必须把 RSS 摘要翻译成简体中文，写入 analysis_meta.summary_cn；只翻译摘要本身，不要加入正文外信息。\n11. pm_actions 至少 2 条，what_to_watch 至少 3 条；信息不足时写“正文未披露，建议人工核查”。\n\n评分参考：\n- high：正文披露了明确的新产品能力、平台机制、Agent/Workflow 能力、企业部署路径、安全治理机制、商业化变化或竞品动作。\n- medium：正文有一定产品、场景、企业采用或技术路线参考价值，但缺少足够机制细节。\n- low：正文主要是教程、宣传、普通案例、泛泛观点，难以支持产品判断。\n\n已有 PM 初筛信息：\npm_score：${pm_score}\npm_reason：${pm_reason}\npm_action：${pm_action}\nshould_deep_analyze：${should_deep_analyze}\n\n输入材料：\n标题：${title}\n来源：${source}\n发布时间：${pubDate}\n链接：${link}\nRSS URL：${rssUrl}\nRSS 摘要：${description}\n\n文章正文：\n${text}\n\n输出要求：\n请严格输出一个 JSON 对象，不要输出 JSON 之外的任何内容。\n\nJSON 结构如下：\n\n{\n  \"analysis_meta\": {\n    \"analysis_fit\": \"high | medium | low\",\n    \"evidence_level\": \"高 | 中 | 低\",\n    \"data_quality\": \"说明正文信息是否足够、是否存在标题摘要正文链接不一致\",\n    \"one_sentence_judgment\": \"一句话判断本文对 AI 产品经理的价值\",\n    \"summary_cn\": \"将 RSS 摘要忠实翻译成简体中文，不添加摘要外信息；如果原摘要已经是中文，则润色为自然中文\",\n    \"should_be_main_report\": true,\n    \"reason_if_not_main_report\": \"如果适合进入主报告，写适合进入主报告；否则说明原因\"\n  },\n  \"narrative_report\": {\n    \"overview\": \"80-160字，说明文章讲了什么，核心变化是什么\",\n    \"why_it_matters\": \"80-160字，解释为什么值得关注，必须引用正文中的具体机制、场景或事实\",\n    \"product_implication\": \"80-160字，说明对产品设计、路线、评估、上线流程或用户体验的启发\",\n    \"business_or_strategy_signal\": \"80-140字，说明商业、生态、渠道、企业采用或战略信号\",\n    \"risk_and_limits\": \"80-140字，说明为什么不能高估，以及正文未披露什么\",\n    \"pm_takeaway\": \"80-140字，给 AI 产品经理的具体结论\",\n    \"caution\": \"说明是否需要人工核查链接、正文和标题一致性\"\n  },\n  \"compact_signals\": {\n    \"product_signal\": \"一句话总结产品信号；没有则写无明显产品信号\",\n    \"competitive_signal\": \"一句话总结竞品或生态信号；没有则写无明显竞品信号\",\n    \"enterprise_adoption_signal\": \"一句话总结企业采用、部署、治理或采购信号；没有则写无明显企业采用信号\",\n    \"agent_or_workflow_signal\": \"一句话总结 Agent、Workflow、Copilot 或自动化启发；没有则写无明显 Agent 或 Workflow 信号\",\n    \"pricing_or_distribution_signal\": \"一句话总结定价、渠道、分发或商业模式启发；没有则写无明显定价或分发信号\"\n  },\n  \"pm_actions\": [\n    \"一个具体、可执行的 AI 产品经理动作建议\",\n    \"第二个具体、可执行的 AI 产品经理动作建议\"\n  ],\n  \"what_to_watch\": [\n    \"一个具体后续关注点\",\n    \"第二个具体后续关注点\",\n    \"第三个具体后续关注点\"\n  ]\n}\n`;\n\n  prompt_stage2 = sanitizeText(prompt_stage2);\n\n  return {\n    json: {\n      article_id,\n\n      title,\n      description,\n      url: link,\n      link,\n      category,\n      pubDate,\n      source,\n      rssUrl,\n\n      pm_score,\n      pm_reason,\n      pm_action,\n      should_deep_analyze,\n\n      text,\n\n      prompt_stage2,\n\n      ollama_stage2_body: {\n        model: 'qwen3:8b',\n        prompt: prompt_stage2,\n        stream: false,\n        think: false,\n        format: stage2FormatSchema,\n        options: {\n          temperature: 0.2,\n          top_p: 0.9,\n          repeat_penalty: 1.1\n        }\n      }\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        480
+      ],
+      "id": "c7981f9e-727b-4143-87a2-be8ec676a5b0",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "var DOUBLE_QUOTE = String.fromCharCode(34);\nvar SINGLE_QUOTE = String.fromCharCode(39);\n\n// 日期筛选使用的时区\n// 英国伦敦时区，会自动处理夏令时\nvar FILTER_TIME_ZONE = 'Europe/London';\n\n// 最近多少天，包含今天\n// 7 表示今天以及之前 6 天\nvar FILTER_DAYS = 7;\n\n// 最多输出多少篇文章\nvar MAX_OUTPUT_COUNT = 20;\n\nvar source = '';\nvar rssUrl = '';\n\nif ($json.source !== undefined && $json.source !== null) {\n  source = String($json.source).trim();\n}\n\nif ($json.rssUrl !== undefined && $json.rssUrl !== null) {\n  rssUrl = String($json.rssUrl).trim();\n} else if ($json.rss_url !== undefined && $json.rss_url !== null) {\n  rssUrl = String($json.rss_url).trim();\n} else if ($json.url !== undefined && $json.url !== null) {\n  rssUrl = String($json.url).trim();\n}\n\nvar rssData = $json;\n\nif ($json.rss_response !== undefined && $json.rss_response !== null) {\n  rssData = $json.rss_response;\n}\n\nvar items = [];\n\nif (\n  rssData.rss &&\n  rssData.rss.channel &&\n  rssData.rss.channel.item\n) {\n  if (Array.isArray(rssData.rss.channel.item)) {\n    items = rssData.rss.channel.item;\n  } else {\n    items = [rssData.rss.channel.item];\n  }\n}\n\nif (\n  items.length === 0 &&\n  rssData.feed &&\n  rssData.feed.entry\n) {\n  if (Array.isArray(rssData.feed.entry)) {\n    items = rssData.feed.entry;\n  } else {\n    items = [rssData.feed.entry];\n  }\n}\n\nif (\n  items.length === 0 &&\n  rssData.feed &&\n  rssData.feed.channel &&\n  rssData.feed.channel.item\n) {\n  if (Array.isArray(rssData.feed.channel.item)) {\n    items = rssData.feed.channel.item;\n  } else {\n    items = [rssData.feed.channel.item];\n  }\n}\n\nfunction toText(value) {\n  if (value === undefined || value === null) {\n    return '';\n  }\n\n  if (typeof value === 'string') {\n    return value.trim();\n  }\n\n  if (typeof value === 'number') {\n    return String(value);\n  }\n\n  if (typeof value === 'boolean') {\n    return String(value);\n  }\n\n  if (Array.isArray(value)) {\n    if (value.length === 0) {\n      return '';\n    }\n\n    return toText(value[0]);\n  }\n\n  if (typeof value === 'object') {\n    if (value._ !== undefined && value._ !== null) {\n      return String(value._).trim();\n    }\n\n    if (value['#text'] !== undefined && value['#text'] !== null) {\n      return String(value['#text']).trim();\n    }\n\n    if (value.href !== undefined && value.href !== null) {\n      return String(value.href).trim();\n    }\n\n    if (value.term !== undefined && value.term !== null) {\n      return String(value.term).trim();\n    }\n\n    if (value.value !== undefined && value.value !== null) {\n      return toText(value.value);\n    }\n\n    if (value.content !== undefined && value.content !== null) {\n      return toText(value.content);\n    }\n  }\n\n  return '';\n}\n\nfunction cleanHtml(value) {\n  var text = String(value || '');\n\n  text = text.replace(/<[^>]*>/g, ' ');\n  text = text.replace(/&nbsp;/g, ' ');\n  text = text.replace(/&amp;/g, '&');\n  text = text.replace(/&lt;/g, '<');\n  text = text.replace(/&gt;/g, '>');\n  text = text.replace(/&quot;/g, DOUBLE_QUOTE);\n  text = text.replace(/&#34;/g, DOUBLE_QUOTE);\n  text = text.replace(/&#39;/g, SINGLE_QUOTE);\n  text = text.replace(/&apos;/g, SINGLE_QUOTE);\n\n  text = text.replace(/“/g, DOUBLE_QUOTE);\n  text = text.replace(/”/g, DOUBLE_QUOTE);\n  text = text.replace(/‘/g, SINGLE_QUOTE);\n  text = text.replace(/’/g, SINGLE_QUOTE);\n  text = text.replace(/`/g, SINGLE_QUOTE);\n  text = text.replace(/…/g, '...');\n\n  while (text.indexOf('  ') >= 0) {\n    text = text.split('  ').join(' ');\n  }\n\n  return text.trim();\n}\n\nfunction getLink(item) {\n  var i;\n  var oneLink;\n  var linkValue;\n\n  if (!item) {\n    return '';\n  }\n\n  if (typeof item.link === 'string') {\n    return item.link.trim();\n  }\n\n  if (Array.isArray(item.link)) {\n    for (i = 0; i < item.link.length; i++) {\n      oneLink = item.link[i];\n\n      if (\n        typeof oneLink === 'string' &&\n        oneLink.trim()\n      ) {\n        return oneLink.trim();\n      }\n\n      if (oneLink && oneLink.href) {\n        return String(oneLink.href).trim();\n      }\n\n      if (oneLink && oneLink._) {\n        return String(oneLink._).trim();\n      }\n\n      if (oneLink && oneLink['#text']) {\n        return String(oneLink['#text']).trim();\n      }\n    }\n  }\n\n  if (item.link && item.link.href) {\n    return String(item.link.href).trim();\n  }\n\n  if (item.link && item.link._) {\n    return String(item.link._).trim();\n  }\n\n  if (item.link && item.link['#text']) {\n    return String(item.link['#text']).trim();\n  }\n\n  if (typeof item.guid === 'string') {\n    return item.guid.trim();\n  }\n\n  if (item.guid && item.guid._) {\n    return String(item.guid._).trim();\n  }\n\n  if (item.guid && item.guid['#text']) {\n    return String(item.guid['#text']).trim();\n  }\n\n  if (item.id) {\n    linkValue = toText(item.id);\n\n    if (linkValue) {\n      return linkValue;\n    }\n  }\n\n  return '';\n}\n\nfunction getCategory(item) {\n  var result = [];\n  var i;\n  var one;\n  var text;\n\n  if (\n    !item ||\n    item.category === undefined ||\n    item.category === null\n  ) {\n    return '';\n  }\n\n  if (typeof item.category === 'string') {\n    return item.category.trim();\n  }\n\n  if (Array.isArray(item.category)) {\n    for (i = 0; i < item.category.length; i++) {\n      one = item.category[i];\n      text = toText(one);\n\n      if (text) {\n        result.push(text);\n      }\n    }\n\n    return result.join(',');\n  }\n\n  return toText(item.category);\n}\n\nfunction getDomain(url) {\n  var text = String(url || '').trim().toLowerCase();\n  var slashIndex;\n\n  if (text.indexOf('https://') === 0) {\n    text = text.slice(8);\n  }\n\n  if (text.indexOf('http://') === 0) {\n    text = text.slice(7);\n  }\n\n  if (text.indexOf('www.') === 0) {\n    text = text.slice(4);\n  }\n\n  slashIndex = text.indexOf('/');\n\n  if (slashIndex >= 0) {\n    text = text.slice(0, slashIndex);\n  }\n\n  return text;\n}\n\nfunction inferSource(articleUrl, feedUrl, fallbackSource) {\n  var articleDomain = getDomain(articleUrl);\n  var feedDomain = getDomain(feedUrl);\n\n  if (articleDomain.indexOf('openai.com') >= 0) {\n    return 'OpenAI';\n  }\n\n  if (articleDomain.indexOf('anthropic.com') >= 0) {\n    return 'Anthropic';\n  }\n\n  if (articleDomain.indexOf('marktechpost.com') >= 0) {\n    return 'MarkTechPost';\n  }\n\n  if (articleDomain.indexOf('huggingface.co') >= 0) {\n    return 'Hugging Face';\n  }\n\n  if (articleDomain.indexOf('nvidia.com') >= 0) {\n    return 'NVIDIA';\n  }\n\n  if (articleDomain.indexOf('deepmind') >= 0) {\n    return 'Google DeepMind';\n  }\n\n  if (articleDomain.indexOf('google') >= 0) {\n    return 'Google';\n  }\n\n  if (articleDomain.indexOf('microsoft.com') >= 0) {\n    return 'Microsoft';\n  }\n\n  if (articleDomain.indexOf('github.com') >= 0) {\n    return 'GitHub';\n  }\n\n  if (articleDomain.indexOf('vercel.com') >= 0) {\n    return 'Vercel';\n  }\n\n  if (articleDomain.indexOf('sakana.ai') >= 0) {\n    return 'Sakana AI';\n  }\n\n  if (feedDomain.indexOf('openai.com') >= 0) {\n    return 'OpenAI';\n  }\n\n  if (feedDomain.indexOf('anthropic.com') >= 0) {\n    return 'Anthropic';\n  }\n\n  if (feedDomain.indexOf('marktechpost.com') >= 0) {\n    return 'MarkTechPost';\n  }\n\n  if (feedDomain.indexOf('huggingface.co') >= 0) {\n    return 'Hugging Face';\n  }\n\n  if (feedDomain.indexOf('nvidia.com') >= 0) {\n    return 'NVIDIA';\n  }\n\n  if (feedDomain.indexOf('feedburner.com') >= 0) {\n    return 'NVIDIA';\n  }\n\n  if (feedDomain.indexOf('deepmind') >= 0) {\n    return 'Google DeepMind';\n  }\n\n  if (feedDomain.indexOf('google') >= 0) {\n    return 'Google';\n  }\n\n  if (feedDomain.indexOf('microsoft.com') >= 0) {\n    return 'Microsoft';\n  }\n\n  if (feedDomain.indexOf('github.com') >= 0) {\n    return 'GitHub';\n  }\n\n  if (fallbackSource) {\n    return fallbackSource;\n  }\n\n  if (articleDomain) {\n    return articleDomain;\n  }\n\n  return feedDomain;\n}\n\nfunction makeArticleId(link, title, index) {\n  var id = String(\n    link ||\n    title ||\n    'article_' + index\n  ).trim().toLowerCase();\n\n  var questionIndex = id.indexOf('?');\n  var hashIndex = id.indexOf('#');\n\n  if (questionIndex >= 0) {\n    id = id.slice(0, questionIndex);\n  }\n\n  if (hashIndex >= 0) {\n    id = id.slice(0, hashIndex);\n  }\n\n  while (\n    id.length > 1 &&\n    id.charAt(id.length - 1) === '/'\n  ) {\n    id = id.slice(0, -1);\n  }\n\n  return id;\n}\n\n/**\n * 把 Date 转换为指定时区的 YYYY-MM-DD。\n */\nfunction getDateKey(date, timeZone) {\n  if (\n    !(date instanceof Date) ||\n    isNaN(date.getTime())\n  ) {\n    return '';\n  }\n\n  var formatter = new Intl.DateTimeFormat('en-CA', {\n    timeZone: timeZone,\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit'\n  });\n\n  var parts = formatter.formatToParts(date);\n  var year = '';\n  var month = '';\n  var day = '';\n\n  for (var i = 0; i < parts.length; i++) {\n    if (parts[i].type === 'year') {\n      year = parts[i].value;\n    } else if (parts[i].type === 'month') {\n      month = parts[i].value;\n    } else if (parts[i].type === 'day') {\n      day = parts[i].value;\n    }\n  }\n\n  if (!year || !month || !day) {\n    return '';\n  }\n\n  return year + '-' + month + '-' + day;\n}\n\n/**\n * 把 YYYY-MM-DD 转成 UTC 零点时间戳。\n * 用于比较日期差，避免夏令时影响。\n */\nfunction dateKeyToUtcTimestamp(dateKey) {\n  var match = String(dateKey || '').match(\n    /^(\\d{4})-(\\d{2})-(\\d{2})$/\n  );\n\n  if (!match) {\n    return null;\n  }\n\n  return Date.UTC(\n    Number(match[1]),\n    Number(match[2]) - 1,\n    Number(match[3])\n  );\n}\n\n/**\n * 根据 YYYY-MM-DD 计算若干天前的日期。\n */\nfunction getPreviousDateKey(dateKey, daysBack) {\n  var timestamp = dateKeyToUtcTimestamp(dateKey);\n\n  if (timestamp === null) {\n    return '';\n  }\n\n  var date = new Date(timestamp);\n\n  date.setUTCDate(\n    date.getUTCDate() - Number(daysBack || 0)\n  );\n\n  var year = String(date.getUTCFullYear());\n  var month = String(date.getUTCMonth() + 1);\n  var day = String(date.getUTCDate());\n\n  if (month.length < 2) {\n    month = '0' + month;\n  }\n\n  if (day.length < 2) {\n    day = '0' + day;\n  }\n\n  return year + '-' + month + '-' + day;\n}\n\n/**\n * 解析 RSS 发布时间。\n */\nfunction parsePublishDate(value) {\n  var text = String(value || '').trim();\n\n  if (!text) {\n    return null;\n  }\n\n  // 10 位 Unix 秒时间戳\n  if (/^\\d{10}$/.test(text)) {\n    var secondsDate = new Date(\n      Number(text) * 1000\n    );\n\n    if (!isNaN(secondsDate.getTime())) {\n      return secondsDate;\n    }\n\n    return null;\n  }\n\n  // 13 位 Unix 毫秒时间戳\n  if (/^\\d{13}$/.test(text)) {\n    var millisecondsDate = new Date(\n      Number(text)\n    );\n\n    if (!isNaN(millisecondsDate.getTime())) {\n      return millisecondsDate;\n    }\n\n    return null;\n  }\n\n  var parsedDate = new Date(text);\n\n  if (isNaN(parsedDate.getTime())) {\n    return null;\n  }\n\n  return parsedDate;\n}\n\n/**\n * 判断文章是否在最近指定天数内。\n *\n * days = 7 时：\n * 今天日期差为 0；\n * 昨天日期差为 1；\n * 最早接受日期差为 6。\n */\nfunction isWithinLastDays(pubDate, timeZone, days) {\n  var publishedDate = parsePublishDate(pubDate);\n\n  if (!publishedDate) {\n    return false;\n  }\n\n  var todayKey = getDateKey(\n    new Date(),\n    timeZone\n  );\n\n  var publishedKey = getDateKey(\n    publishedDate,\n    timeZone\n  );\n\n  var todayTimestamp =\n    dateKeyToUtcTimestamp(todayKey);\n\n  var publishedTimestamp =\n    dateKeyToUtcTimestamp(publishedKey);\n\n  if (\n    todayTimestamp === null ||\n    publishedTimestamp === null\n  ) {\n    return false;\n  }\n\n  var oneDayMilliseconds =\n    24 * 60 * 60 * 1000;\n\n  var differenceInDays = Math.floor(\n    (todayTimestamp - publishedTimestamp) /\n    oneDayMilliseconds\n  );\n\n  return (\n    differenceInDays >= 0 &&\n    differenceInDays < days\n  );\n}\n\nfunction buildPmPrompt(article) {\n  var lines = [];\n\n  var hasDescription =\n    article.description &&\n    String(article.description).trim();\n\n  lines.push('/no_think');\n  lines.push('');\n  lines.push(\n    '你是一位资深 AI 产品经理、AI 竞品分析师和企业 AI 落地研究员。'\n  );\n  lines.push('');\n  lines.push('任务：');\n  lines.push(\n    '请只根据下面 RSS 信息，判断这条新闻对“AI 产品经理”的实际工作价值。'\n  );\n  lines.push('');\n  lines.push('语言规则：');\n  lines.push(\n    '1. 必须使用简体中文输出所有字段值。'\n  );\n  lines.push(\n    '2. 不要输出英文句子。'\n  );\n  lines.push(\n    '3. OpenAI、Anthropic、Google、Microsoft、GitHub、NVIDIA、Hugging Face、API、SDK、Agent、Workflow、Copilot、Runtime、Benchmark 等专有名词可以保留英文。'\n  );\n  lines.push(\n    '4. 如果原文是英文，请先理解含义，再用自然中文总结，不要逐字硬翻。'\n  );\n  lines.push(\n    '5. pm_reason、competitive_signal、product_signal、why_not_higher 必须是中文。'\n  );\n  lines.push(\n    '6. pm_action 必须严格使用中文固定值之一：必读并进入竞品/路线分析、深度阅读、记录到情报库、可跳过。'\n  );\n  lines.push('');\n  lines.push('重点判断它是否值得进入：');\n  lines.push('1. 竞品分析');\n  lines.push('2. 产品路线判断');\n  lines.push(\n    '3. Agent / Workflow / Copilot 产品设计'\n  );\n  lines.push(\n    '4. 企业 AI 落地、治理、采购研究'\n  );\n  lines.push(\n    '5. 模型上线、安全评估、合规流程研究'\n  );\n  lines.push('');\n  lines.push(\n    '只输出合法 JSON，不要 Markdown，不要解释，不要代码块。'\n  );\n  lines.push(\n    'JSON 字段名必须使用英文，字段值必须使用简体中文。'\n  );\n  lines.push('');\n  lines.push(\n    '评分要有区分度，不要机械给同一个分数。默认从 2 分开始，根据 RSS 标题、摘要、来源、分类和链接中的明确线索加分或减分。'\n  );\n  lines.push(\n    '2 分用于“AI 相关但信息不足或知道即可”的弱新闻；3 分用于“有明确参考价值、值得记录”的新闻；4 分用于当天值得深读的新闻；5 分用于可能影响未来 3-6 个月路线或格局的新闻。'\n  );\n  lines.push(\n    '不要所有新闻都给 2 分，也不要所有新闻都给 3 分。必须根据标题和摘要中的具体信息拉开分数。'\n  );\n  lines.push(\n    '关键词不能直接决定分数，必须看摘要是否提供了具体价值；信息不足时优先给 2，而不是 3。'\n  );\n  lines.push('');\n  lines.push('摘要缺失规则：');\n  lines.push(\n    '- 如果 RSS 摘要为空，只能根据标题、来源、分类和链接判断。'\n  );\n  lines.push(\n    '- 摘要为空时，不要脑补正文内容，不要推断标题之外的信息。'\n  );\n  lines.push(\n    '- 如果只有标题，且标题没有明确说明具体新能力、产品机制、企业采用、部署路径、模型评估方法或用户场景，应给 2 分。'\n  );\n  lines.push(\n    '- 如果标题本身已经明确说明重大产品能力、平台变化、Agent/Workflow 机制、Benchmark 或头部玩家关键动作，可以给 3-4 分。'\n  );\n  lines.push('');\n  lines.push(\n    '如果新闻只是提到 AI、Benchmark、Agent、Workflow、开发者工具、垂直行业或头部公司，但摘要没有说明具体新能力、具体场景、具体机制、具体采用方式或具体产品影响，仍然应给 2 分。'\n  );\n  lines.push(\n    '只有当摘要能明确支持一个可记录的产品判断、竞品判断、部署治理判断、模型评估判断或用户场景判断时，才给 3 分。'\n  );\n  lines.push(\n    '如果摘要已经明确披露新的产品能力、平台机制、Agent/Workflow 能力、企业部署路径、评估方法、开发者能力或头部玩家动作，可以给 4 或 5。'\n  );\n  lines.push(\n    'pm_score 必须是 0、1、2、3、4、5 中的整数。'\n  );\n  lines.push('');\n  lines.push('评分标准：');\n  lines.push('');\n  lines.push('0 = 无关');\n  lines.push(\n    '与 AI 产品经理工作几乎无关，不影响产品、用户、竞品、商业化、部署、治理或技术路线。'\n  );\n  lines.push('');\n  lines.push('1 = 很低');\n  lines.push(\n    '普通品牌宣传、活动公告、泛泛观点、社区新闻、没有产品信息的公司动态。'\n  );\n  lines.push(\n    '看完不会改变任何产品判断。'\n  );\n  lines.push('');\n  lines.push('2 = 一般参考');\n  lines.push(\n    '2 分不是失败分，而是“知道即可”的正常筛选分。'\n  );\n  lines.push(\n    '有一定信息量，但对 AI 产品经理的产品判断、竞品判断、部署治理或路线判断价值较低。'\n  );\n  lines.push(\n    '这类内容可以略读，但通常不需要进入重点情报库，也不需要深度分析。'\n  );\n  lines.push('以下情况适合给 2 分：');\n  lines.push(\n    '- 泛泛的 AI 行业观点、趋势总结、榜单、盘点、教程、课程、活动公告'\n  );\n  lines.push(\n    '- 普通客户故事、普通案例、普通合作新闻，但没有明确 ROI、部署路径、治理机制或产品能力细节'\n  );\n  lines.push(\n    '- 只说明某公司使用了 AI，但没有说明能力变化、用户场景变化、商业模式、部署方式或治理机制'\n  );\n  lines.push(\n    '- 开源模型、工具或框架新闻，但摘要没有说明新能力、新接口、新工作流或明确采用价值'\n  );\n  lines.push(\n    '- 摘要只说发布、介绍、展示、研究、合作、开源，但没有说明具体产品影响'\n  );\n  lines.push(\n    '- 摘要只说明某个 AI 系统表现不错，但没有说明产品化路径、部署方式、评估机制或用户场景变化'\n  );\n  lines.push(\n    '- 摘要只有概念名或新闻标题，没有足够信息支持进入情报库'\n  );\n  lines.push(\n    '- 文章可能有价值，但 RSS 摘要信息不足以判断具体产品意义'\n  );\n  lines.push(\n    '- 与 AI 有关，但看完基本不会改变产品优先级、竞品判断、销售话术、集成策略或上线流程'\n  );\n  lines.push('');\n  lines.push('3 = 值得记录');\n  lines.push(\n    '有明确参考价值，值得进入情报库或未来回看，但不一定需要当天深度阅读原文。'\n  );\n  lines.push(\n    '给 3 分必须满足：能明确写出“它为什么值得以后回看”。'\n  );\n  lines.push(\n    '如果 pm_reason 只能写成“有一定参考价值”“值得关注”“属于 AI 应用”，但说不出具体价值点，必须降为 2。'\n  );\n  lines.push('适合给 3 分的情况包括：');\n  lines.push(\n    '- 明确的垂直行业 AI 应用，例如医疗、金融、工业、教育、法律、科研等场景，并且摘要说明了具体应用方向'\n  );\n  lines.push(\n    '- 明确的模型评估、Benchmark、安全测试、红队测试、研究框架或性能比较，并且摘要说明了它评估什么或为什么有用'\n  );\n  lines.push(\n    '- 明确的企业采用、客户案例、合作或部署线索，但还没有完整可复制部署范式'\n  );\n  lines.push(\n    '- 明确的产品方向、用户场景、开发者工具、API/SDK、Agent/Workflow 相关线索，但细节不足以给 4'\n  );\n  lines.push(\n    '- 来自 OpenAI、Anthropic、Google、Microsoft、GitHub、NVIDIA、Hugging Face 等头部玩家，且摘要说明其动作可能影响产品、生态、评估或开发者使用'\n  );\n  lines.push(\n    '如果新闻只是泛泛提到 AI、没有具体场景或价值，给 2；如果已经有明确产品能力、平台机制或部署路径，考虑 4。'\n  );\n  lines.push('');\n  lines.push('4 = 值得深度阅读');\n  lines.push(\n    '满足以下任意一个强条件，或两个中等条件，就可以给 4：'\n  );\n  lines.push(\n    '- 披露了新的产品能力、平台能力、API/SDK、Agent Runtime、工具调用、权限、记忆、长任务执行或工作流机制'\n  );\n  lines.push(\n    '- RSS 摘要已经明确说明新产品、新平台、新框架、新评估基准、新开发者能力或新的企业落地方式'\n  );\n  lines.push(\n    '- 来自 OpenAI、Anthropic、Google、Microsoft、GitHub、NVIDIA、Hugging Face 等头部玩家，且摘要明确显示会影响 AI 产品能力、模型评估、Agent/Workflow、开发者生态或企业采用'\n  );\n  lines.push(\n    '- 影响产品路线、功能优先级、用户体验、定价、包装、销售话术或集成策略'\n  );\n  lines.push(\n    '- 影响企业 AI 采用、部署、治理、安全、审计、采购或云集成路径'\n  );\n  lines.push(\n    '- 对竞品分析有明确价值，能说明竞品正在改变产品形态、渠道、生态或客户绑定方式'\n  );\n  lines.push(\n    '- 提供了可复制的产品策略、部署范式、治理方法或上线流程'\n  );\n  lines.push(\n    '- 直接影响模型评估、安全上线、红队、合规或真实用户场景测试'\n  );\n  lines.push('');\n  lines.push('特殊 4 分候选规则：');\n  lines.push(\n    '如果新闻涉及 Agent Runtime、长任务执行、云端执行环境、代码执行沙箱、企业权限治理、生产工作流编排，并且主体是 OpenAI、Anthropic、Google、Microsoft、GitHub、Cursor、Replit、Devin 等头部 AI Coding 或 Agent 玩家，应进入 4 分候选。'\n  );\n  lines.push(\n    '如果新闻涉及新的 Benchmark、模型评估体系、真实任务评测、安全上线评估、红队测试、专业领域模型能力评估，并且主体是头部 AI 玩家或影响模型产品化判断，应进入 4 分候选。'\n  );\n  lines.push(\n    '只有在 RSS 信息明确显示产品能力、平台能力、部署路径、企业采用路径、评估方法或竞品动作时，才给 4；如果只是标题提及或信息不足，给 3。'\n  );\n  lines.push('');\n  lines.push('5 = 必看');\n  lines.push(\n    '必须非常克制。只有当新闻可能影响未来 3-6 个月产品路线、平台竞争、Agent 范式、企业采购路径、开发者生态或行业格局时，才给 5。'\n  );\n  lines.push('通常包括：');\n  lines.push('- 重大模型能力变化');\n  lines.push('- 重要 API / SDK / 平台能力变化');\n  lines.push(\n    '- Agent Runtime、长任务执行、工具调用、记忆、工作流自动化的关键突破'\n  );\n  lines.push('- 头部 AI 产品形态变化');\n  lines.push(\n    '- 重大并购、战略合作、生态联盟，且会改变产品或渠道格局'\n  );\n  lines.push(\n    '- 影响企业部署路径、云采购路径、安全上线或合规要求的关键方法'\n  );\n  lines.push(\n    '- 明确会改变开发者生态、企业采购路径、模型评估标准或产品上线流程的头部玩家动作'\n  );\n  lines.push('');\n  lines.push('压分规则：');\n  lines.push(\n    '- 客户案例默认最高 3 分；只有体现大规模部署范式、明确 ROI、治理路径、采购路径或可复制产品策略时，才可给 4。'\n  );\n  lines.push(\n    '- 课程培训默认最高 2 分；只有透露新平台能力、生态战略或产品路线时，才可给 3-4。'\n  );\n  lines.push(\n    '- 普通合作新闻默认最高 3 分；只有涉及渠道、云采购、开发者生态、企业部署路径或明确商业化机制时，才可给 4。'\n  );\n  lines.push(\n    '- 纯研究新闻默认最高 3 分；只有直接影响模型评估、安全上线、Agent 能力、产品架构或产业化路径时，才可给 4。'\n  );\n  lines.push(\n    '- 品牌宣传、公关故事、活动公告默认最高 2 分。'\n  );\n  lines.push(\n    '- 只说明用了 AI，但没有说明能力变化、场景变化、商业模式、部署方式或治理机制，最高 2 分。'\n  );\n  lines.push(\n    '- 如果标题、摘要、链接明显不一致，必须降 1 分，并在 pm_reason 中说明信息一致性存疑。'\n  );\n  lines.push('');\n  lines.push('2/3 分区分规则：');\n  lines.push(\n    '- 如果只有泛泛 AI 相关性，或只是出现 Benchmark、Agent、Workflow、API、SDK、医疗、金融、工业、头部公司等关键词，但没有说明具体机制或产品影响，给 2。'\n  );\n  lines.push(\n    '- 如果能明确说出它属于哪个具体 AI 应用场景、模型评估方向、企业采用线索、产品方向或开发者生态动作，并且值得以后回看，给 3。'\n  );\n  lines.push(\n    '- 关键词不能直接决定分数，必须看摘要是否提供了具体价值。'\n  );\n  lines.push(\n    '- 信息不足时优先给 2，而不是 3。'\n  );\n  lines.push('');\n  lines.push('反机械评分规则：');\n  lines.push(\n    '- 不要所有新闻都给同一个分数。必须根据新闻强弱拉开分数。'\n  );\n  lines.push(\n    '- 明显普通、泛泛、宣传、活动、课程、榜单、无产品信息的内容，应给 0-2 分。'\n  );\n  lines.push(\n    '- 明确出现新产品能力、平台能力、Agent/Workflow、API/SDK、Benchmark、企业部署、治理、安全评估、头部玩家战略动作的内容，应考虑 4 分。'\n  );\n  lines.push(\n    '- 只有真正可能改变未来 3-6 个月产品路线、竞争格局、企业采购路径或开发者生态的内容，才给 5 分。'\n  );\n  lines.push('');\n  lines.push('4 分校验：');\n  lines.push(\n    '如果你想给 4 分，必须能回答：AI 产品经理今天读完它后，会改变哪一个具体判断或动作？'\n  );\n  lines.push(\n    '如果回答不具体，只能给 3 分。'\n  );\n  lines.push('');\n  lines.push('5 分校验：');\n  lines.push(\n    '如果你想给 5 分，必须能回答：它为什么可能影响未来 3-6 个月的产品路线、竞争格局或企业采购路径？'\n  );\n  lines.push(\n    '如果回答不具体，只能给 4 分。'\n  );\n  lines.push('');\n  lines.push('pm_action 映射规则：');\n  lines.push(\n    '- pm_score = 5：pm_action 必须是 必读并进入竞品/路线分析'\n  );\n  lines.push(\n    '- pm_score = 4：pm_action 必须是 深度阅读'\n  );\n  lines.push(\n    '- pm_score = 3：pm_action 必须是 记录到情报库'\n  );\n  lines.push(\n    '- pm_score <= 2：pm_action 必须是 可跳过'\n  );\n  lines.push('');\n  lines.push('should_deep_analyze 规则：');\n  lines.push(\n    '- pm_score >= 3 时，should_deep_analyze 必须为 true。'\n  );\n  lines.push(\n    '- pm_score <= 2 时，should_deep_analyze 必须为 false。'\n  );\n  lines.push('');\n  lines.push('字段输出要求：');\n  lines.push(\n    '- pm_reason：用 1-3 句中文说明为什么给这个分数，必须结合标题、摘要、来源和链接判断。'\n  );\n  lines.push(\n    '- competitive_signal：用中文说明是否有竞品、生态、平台、渠道或头部玩家动向；没有则写“无明显竞品或生态信号”。'\n  );\n  lines.push(\n    '- product_signal：用中文说明是否有产品能力、用户场景、API/SDK、Agent/Workflow、企业部署或治理信号；没有则写“无明显产品信号”。'\n  );\n  lines.push(\n    '- why_not_higher：用中文说明为什么没有给更高分；如果已经是 5 分，写“已是最高优先级”。'\n  );\n  lines.push('');\n  lines.push('新闻信息：');\n  lines.push('');\n  lines.push('标题：');\n  lines.push(article.title);\n  lines.push('');\n\n  if (hasDescription) {\n    lines.push('摘要：');\n    lines.push(article.description);\n    lines.push('');\n  } else {\n    lines.push('摘要状态：');\n    lines.push(\n      '本条 RSS 没有提供摘要，请主要根据标题、来源、分类和链接判断。'\n    );\n    lines.push(\n      '如果标题信息不足，不能推断出具体产品价值、竞品价值、部署治理价值、模型评估价值或用户场景价值，应优先给 2 分，而不是 3 分。'\n    );\n    lines.push(\n      '不要因为标题里出现 AI、Agent、Benchmark、模型、OpenAI、Google、NVIDIA 等关键词就直接给 3 分。'\n    );\n    lines.push('');\n  }\n\n  lines.push('来源：');\n  lines.push(article.source);\n  lines.push('');\n  lines.push('原始分类：');\n  lines.push(article.category);\n  lines.push('');\n  lines.push('发布时间：');\n  lines.push(article.pubDate);\n  lines.push('');\n  lines.push('链接：');\n  lines.push(article.link);\n  lines.push('');\n  lines.push(\n    '请严格输出一个 JSON 对象，不要输出 JSON 之外的任何内容。'\n  );\n  lines.push('');\n  lines.push('JSON 格式必须如下：');\n  lines.push('{');\n  lines.push('  \"pm_score\": 2,');\n  lines.push(\n    '  \"pm_reason\": \"中文评分理由\",'\n  );\n  lines.push(\n    '  \"pm_action\": \"可跳过\",'\n  );\n  lines.push(\n    '  \"competitive_signal\": \"中文竞品或生态信号\",'\n  );\n  lines.push(\n    '  \"product_signal\": \"中文产品信号\",'\n  );\n  lines.push(\n    '  \"why_not_higher\": \"中文说明为什么没有给更高分\",'\n  );\n  lines.push(\n    '  \"should_deep_analyze\": false'\n  );\n  lines.push('}');\n\n  return lines.join('\\n');\n}\n\n/**\n * 创建 n8n 输出项。\n */\nfunction buildOutputItem(\n  article,\n  filterMode,\n  totalItems,\n  selectedCount,\n  todayKey,\n  rangeStartKey\n) {\n  var parsedDate = parsePublishDate(\n    article.pubDate\n  );\n\n  return {\n    json: {\n      article_id: article.article_id,\n      title: article.title,\n      description: article.description,\n      link: article.link,\n      url: article.url,\n      category: article.category,\n      pubDate: article.pubDate,\n      source: article.source,\n      rssUrl: article.rssUrl,\n\n      pm_score_prompt: buildPmPrompt(article),\n\n      // last_7_days：\n      // 最近 7 天内有文章\n      //\n      // latest_fallback：\n      // 最近 7 天没有文章，回退到最近 20 篇\n      article_filter_mode: filterMode,\n\n      is_recent_date_match:\n        filterMode === 'last_7_days',\n\n      used_latest_fallback:\n        filterMode === 'latest_fallback',\n\n      debug_has_description: Boolean(\n        article.description &&\n        String(article.description).trim()\n      ),\n\n      debug_items_count: totalItems,\n      debug_filtered_items_count: selectedCount,\n\n      debug_original_source: source,\n      debug_original_rssUrl: rssUrl,\n\n      debug_article_domain: getDomain(\n        article.link\n      ),\n\n      debug_rss_domain: getDomain(\n        rssUrl\n      ),\n\n      debug_filter_time_zone:\n        FILTER_TIME_ZONE,\n\n      debug_filter_days:\n        FILTER_DAYS,\n\n      debug_filter_today:\n        todayKey,\n\n      debug_filter_range_start:\n        rangeStartKey,\n\n      debug_article_date: parsedDate\n        ? getDateKey(\n            parsedDate,\n            FILTER_TIME_ZONE\n          )\n        : ''\n    }\n  };\n}\n\nvar output = [];\nvar allArticles = [];\n\nvar currentDateKey = getDateKey(\n  new Date(),\n  FILTER_TIME_ZONE\n);\n\n// FILTER_DAYS = 7 时，起始日期是今天往前 6 天\nvar rangeStartDateKey = getPreviousDateKey(\n  currentDateKey,\n  FILTER_DAYS - 1\n);\n\n/**\n * 第一步：\n * 解析 RSS 中全部文章。\n */\nfor (\n  var index = 0;\n  index < items.length;\n  index++\n) {\n  var item = items[index];\n\n  if (!item) {\n    continue;\n  }\n\n  var link = getLink(item);\n  var title = toText(item.title);\n\n  var descriptionRaw = '';\n\n  if (toText(item.description)) {\n    descriptionRaw = toText(\n      item.description\n    );\n  } else if (toText(item.summary)) {\n    descriptionRaw = toText(\n      item.summary\n    );\n  } else if (toText(item.content)) {\n    descriptionRaw = toText(\n      item.content\n    );\n  }\n\n  var description = cleanHtml(\n    descriptionRaw\n  );\n\n  var category = getCategory(item);\n\n  var pubDate = '';\n\n  if (toText(item.pubDate)) {\n    pubDate = toText(item.pubDate);\n  } else if (toText(item.published)) {\n    pubDate = toText(item.published);\n  } else if (toText(item.updated)) {\n    pubDate = toText(item.updated);\n  } else if (toText(item.isoDate)) {\n    pubDate = toText(item.isoDate);\n  } else if (toText(item.date)) {\n    pubDate = toText(item.date);\n  } else if (toText(item.created)) {\n    pubDate = toText(item.created);\n  }\n\n  var finalSource = inferSource(\n    link,\n    rssUrl,\n    source\n  );\n\n  var parsedPublishDate =\n    parsePublishDate(pubDate);\n\n  allArticles.push({\n    article_id: makeArticleId(\n      link,\n      title,\n      index\n    ),\n\n    title: title,\n    description: description,\n    link: link,\n    url: link,\n    category: category,\n    pubDate: pubDate,\n    source: finalSource,\n    rssUrl: rssUrl,\n\n    // 仅用于排序\n    _parsedTimestamp: parsedPublishDate\n      ? parsedPublishDate.getTime()\n      : 0,\n\n    // 日期相同时保留 RSS 原始顺序\n    _originalIndex: index\n  });\n}\n\n/**\n * 第二步：\n * 找出最近 7 天内的文章。\n */\nvar recentArticles = [];\n\nfor (\n  var recentIndex = 0;\n  recentIndex < allArticles.length;\n  recentIndex++\n) {\n  var recentArticle =\n    allArticles[recentIndex];\n\n  if (\n    isWithinLastDays(\n      recentArticle.pubDate,\n      FILTER_TIME_ZONE,\n      FILTER_DAYS\n    )\n  ) {\n    recentArticles.push(\n      recentArticle\n    );\n  }\n}\n\n/**\n * 排序函数：\n * 发布时间从新到旧。\n * 无法解析日期的文章排在最后。\n */\nfunction sortArticlesByDate(a, b) {\n  if (\n    b._parsedTimestamp !==\n    a._parsedTimestamp\n  ) {\n    return (\n      b._parsedTimestamp -\n      a._parsedTimestamp\n    );\n  }\n\n  return (\n    a._originalIndex -\n    b._originalIndex\n  );\n}\n\n/**\n * 第三步：\n * 如果最近 7 天内有文章，\n * 只输出这些文章，最多 20 篇。\n */\nif (recentArticles.length > 0) {\n  recentArticles.sort(\n    sortArticlesByDate\n  );\n\n  var recentOutputCount = Math.min(\n    recentArticles.length,\n    MAX_OUTPUT_COUNT\n  );\n\n  for (\n    var recentOutputIndex = 0;\n    recentOutputIndex < recentOutputCount;\n    recentOutputIndex++\n  ) {\n    output.push(\n      buildOutputItem(\n        recentArticles[\n          recentOutputIndex\n        ],\n        'last_7_days',\n        items.length,\n        recentOutputCount,\n        currentDateKey,\n        rangeStartDateKey\n      )\n    );\n  }\n\n  return output;\n}\n\n/**\n * 第四步：\n * 如果最近 7 天没有文章，\n * 输出整个 RSS 中发布时间最近的 20 篇。\n */\nallArticles.sort(\n  sortArticlesByDate\n);\n\nvar fallbackOutputCount = Math.min(\n  allArticles.length,\n  MAX_OUTPUT_COUNT\n);\n\nfor (\n  var fallbackIndex = 0;\n  fallbackIndex < fallbackOutputCount;\n  fallbackIndex++\n) {\n  output.push(\n    buildOutputItem(\n      allArticles[fallbackIndex],\n      'latest_fallback',\n      items.length,\n      fallbackOutputCount,\n      currentDateKey,\n      rangeStartDateKey\n    )\n  );\n}\n\n/**\n * 第五步：\n * 如果 RSS 完全没有任何文章，\n * 输出一个状态项，避免后续节点不执行。\n */\nif (output.length === 0) {\n  output.push({\n    json: {\n      no_articles_available: true,\n      status: 'no_articles_available',\n      message: 'RSS 中没有可处理的文章',\n\n      article_id: '',\n      title: '',\n      description: '',\n      link: '',\n      url: '',\n      category: '',\n      pubDate: '',\n      source: source,\n      rssUrl: rssUrl,\n\n      pm_score_prompt: '',\n\n      should_skip_article_processing: true,\n\n      article_filter_mode: 'empty_feed',\n      is_recent_date_match: false,\n      used_latest_fallback: false,\n\n      debug_items_count: items.length,\n      debug_filtered_items_count: 0,\n\n      debug_original_source: source,\n      debug_original_rssUrl: rssUrl,\n\n      debug_filter_time_zone:\n        FILTER_TIME_ZONE,\n\n      debug_filter_days:\n        FILTER_DAYS,\n\n      debug_filter_today:\n        currentDateKey,\n\n      debug_filter_range_start:\n        rangeStartDateKey\n    }\n  });\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        208
+      ],
+      "id": "bbc3bb61-1d8d-48e0-a431-7377a3ac99f2",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1776,
+        144
+      ],
+      "id": "2f20899e-1244-4dc5-a4d5-f1b142cd3654",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Code in JavaScript1').item.json.ollama_stage2_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2144,
+        208
+      ],
+      "id": "04b96f05-da3d-4bd6-99a7-e849ae61f9e4",
+      "name": "HTTP Request3",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map((item, index) => {\n  function cleanJsonString(value) {\n    if (typeof value !== 'string') return value;\n\n    return value\n      .trim()\n      .replace(/^```json\\s*/i, '')\n      .replace(/^```\\s*/i, '')\n      .replace(/```$/i, '')\n      .trim();\n  }\n\n  function parseStage2(rawText) {\n    if (!rawText || !String(rawText).trim()) {\n      return {\n        stage2_parse_error: true,\n        stage2_parse_error_message: 'Stage2 返回为空',\n        stage2_raw_response: rawText || ''\n      };\n    }\n\n    try {\n      var cleaned = cleanJsonString(rawText);\n      return typeof cleaned === 'string' ? JSON.parse(cleaned) : cleaned;\n    } catch (e) {\n      return {\n        stage2_parse_error: true,\n        stage2_parse_error_message: e.message,\n        stage2_raw_response: rawText\n      };\n    }\n  }\n\n  function safeText(value, fallback) {\n    if (fallback === undefined) fallback = '';\n\n    if (value === null || value === undefined) return fallback;\n\n    if (typeof value === 'string') {\n      var text = value.trim();\n      return text || fallback;\n    }\n\n    if (typeof value === 'number' || typeof value === 'boolean') {\n      return String(value);\n    }\n\n    return fallback;\n  }\n\n  function safeArray(value, fallback) {\n    if (fallback === undefined) fallback = [];\n\n    if (Array.isArray(value)) {\n      var arr = value.filter(function (x) {\n        return Boolean(x);\n      });\n\n      return arr.length ? arr : fallback;\n    }\n\n    if (typeof value === 'string' && value.trim()) {\n      return [value.trim()];\n    }\n\n    return fallback;\n  }\n\n  function scoreToNumber(value) {\n    var n = Number(value);\n    if (isNaN(n)) return 0;\n    return n;\n  }\n\n  function getStage2Raw(currentJson) {\n    if (typeof currentJson === 'string') return currentJson;\n\n    return (\n      currentJson.response ||\n      currentJson.output ||\n      currentJson.text ||\n      currentJson.message ||\n      ''\n    );\n  }\n\n  // 1. 当前 item 是 Stage2 HTTP Request 的输出\n  var raw = getStage2Raw(item.json);\n  var stage2 = parseStage2(raw);\n\n  // 2. 从名叫 Loop Over Items 的节点，拿当前 loop branch 的那条资料\n  var base = {};\n\n  try {\n    base = $('Loop Over Items').item.json || {};\n  } catch (e) {\n    base = {};\n  }\n\n  var pmScore = scoreToNumber(\n    base.pm_score !== undefined && base.pm_score !== null\n      ? base.pm_score\n      : base.importance_score\n  );\n\n  var title = safeText(\n    base.title_cn ||\n    base.title ||\n    base.original_title ||\n    '',\n    '未命名文章'\n  );\n\n  var description = safeText(\n    base.description ||\n    base.executive_summary ||\n    '',\n    '正文信息不足'\n  );\n\n  var link = safeText(\n    base.link ||\n    base.url ||\n    base.original_url ||\n    '',\n    ''\n  );\n\n  var category = safeText(\n    base.category ||\n    '其他',\n    '其他'\n  );\n\n  var source = safeText(\n    base.source ||\n    base.feed_source ||\n    base.feedTitle ||\n    '',\n    '未提供'\n  );\n\n  var shouldDeepAnalyze =\n    base.should_deep_analyze === true ||\n    base.should_deep_analyze === 'true' ||\n    pmScore >= 4;\n\n  return {\n    json: {\n      // 一、Loop Over Items 当前 loop branch 的原始/PM 初筛字段\n      article_id: base.article_id || link || title,\n\n      title: title,\n      description: description,\n      url: link,\n      category: category,\n      pubDate: base.pubDate || base.isoDate || '',\n      source: source,\n\n      pm_score: pmScore,\n      pm_reason: base.pm_reason || base.importance_reason || '',\n      pm_action: base.pm_action || base.reason_to_skip_or_read || '',\n      should_deep_analyze: shouldDeepAnalyze,\n\n      // 二、兼容日报节点的旧字段名\n      importance_score: base.importance_score !== undefined && base.importance_score !== null\n        ? base.importance_score\n        : pmScore,\n\n      importance_reason: base.importance_reason || base.pm_reason || '',\n      title_cn: base.title_cn || title,\n      executive_summary: base.executive_summary || description,\n\n      key_points: safeArray(\n        base.key_points,\n        description && description !== '正文信息不足'\n          ? [description]\n          : ['正文信息不足']\n      ),\n\n      keywords: safeArray(\n        base.keywords,\n        category ? [category] : ['其他']\n      ),\n\n      target_audience: safeArray(\n        base.target_audience,\n        ['AI 产品经理']\n      ),\n\n      secondary_categories: safeArray(\n        base.secondary_categories,\n        category ? [category] : ['其他']\n      ),\n\n      deep_analyze_reason: base.deep_analyze_reason || base.pm_reason || '',\n      reason_to_skip_or_read: base.reason_to_skip_or_read || base.pm_action || base.pm_reason || '',\n      link_consistency: base.link_consistency || '正常',\n\n      // 三、Prompt2 / Stage2 输出\n      analysis_meta: stage2.analysis_meta || {},\n      narrative_report: stage2.narrative_report || {},\n      compact_signals: stage2.compact_signals || {},\n      pm_actions: safeArray(stage2.pm_actions, ['正文未披露']),\n      what_to_watch: safeArray(stage2.what_to_watch, ['正文未披露']),\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        224
+      ],
+      "id": "0ad2e0e7-fe22-4c4e-98ef-9f0fc9d8999b",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n      {\n    json: {\n      source: 'OpenAI',\n      rssUrl: 'https://openai.com/news/rss.xml'\n    }\n  },\n  {\n    json: {\n      source: 'Google AI',\n      rssUrl: 'https://blog.google/technology/ai/rss/'\n    }\n  },\n  {\n    json: {\n      source: 'Hugging Face',\n      rssUrl: 'https://huggingface.co/blog/feed.xml'\n    }\n  },\n  {\n    json: {\n      source: 'NVIDIA',\n      rssUrl: 'https://feeds.feedburner.com/nvidiablog'\n    }\n  },\n  {\n    json: {\n      source: 'AWS Machine Learning',\n      rssUrl: 'https://aws.amazon.com/blogs/machine-learning/feed/'\n    }\n  },\n  {\n    json: {\n      source: 'Microsoft Research',\n      rssUrl: 'https://www.microsoft.com/en-us/research/feed/'\n    }\n  },\n  {\n    json: {\n      source: 'GitHub Blog',\n      rssUrl: 'https://github.blog/feed/'\n    }\n  },\n  {\n    json: {\n      source: 'GitHub Changelog',\n      rssUrl: 'https://github.blog/changelog/feed/'\n    }\n  },\n  {\n    json: {\n      source: 'MarkTechPost',\n      rssUrl: 'https://www.marktechpost.com/feed/'\n    }\n  },\n\n{\n  json: {\n    source: 'AWS Machine Learning',\n    rssUrl: 'https://aws.amazon.com/blogs/machine-learning/feed/'\n  }\n}\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "c02e2e22-66dd-4bcc-b3c1-bc64fcff1851",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen3:8b\",\n  \"prompt\": {{$json.pm_score_prompt.toJsonString()}},\n  \"format\": \"json\",\n  \"stream\": false,\n  \"options\": {\n    \"temperature\": 0.1\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        256
+      ],
+      "id": "724d9096-c6cd-429f-ab0d-918ffb68f0aa",
+      "name": "HTTP Request5",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const scoredItems = $input.all()\n  .map((item, index) => {\n    const raw =\n      item.json.response ||\n      item.json.text ||\n      item.json.data ||\n      '';\n\n    let parsed;\n\n    try {\n      parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;\n    } catch (e) {\n      parsed = {\n        pm_score: 0,\n        pm_reason: 'Ollama评分JSON解析失败',\n        pm_action: '跳过',\n        should_deep_analyze: false\n      };\n    }\n\n    let original = {};\n\n    try {\n      original = $('Code').all()[index]?.json || {};\n    } catch (e) {\n      original = {};\n    }\n\n    const pm_score = Number(parsed.pm_score || 0);\n\n    return {\n      json: {\n        title: original.title || item.json.title || '',\n        description: original.description || item.json.description || '',\n        link: original.link || item.json.link || '',\n        url: original.url || original.link || item.json.url || item.json.link || '',\n        category: original.category || item.json.category || '',\n        pubDate: original.pubDate || item.json.pubDate || '',\n        source: original.source || item.json.source || '',\n        rssUrl: original.rssUrl || item.json.rssUrl || '',\n\n        pm_score: pm_score,\n        pm_reason: parsed.pm_reason || '',\n        pm_action: parsed.pm_action || '',\n        should_deep_analyze:\n          parsed.should_deep_analyze !== undefined\n            ? Boolean(parsed.should_deep_analyze)\n            : pm_score >= 3,\n\n        competitive_signal: parsed.competitive_signal || '',\n        product_signal: parsed.product_signal || '',\n        why_not_higher: parsed.why_not_higher || '',\n\n        debug_index: index,\n        debug_original_title: original.title || '',\n        debug_original_link: original.link || '',\n        debug_original_source: original.source || '',\n        debug_pm_raw_preview: String(raw).slice(0, 300)\n      }\n    };\n  });\n\nconst filteredItems = scoredItems.filter(function (item) {\n  return item.json.pm_score >= 3;\n});\n\nif (filteredItems.length > 0) {\n  return filteredItems;\n}\n\nconst fallbackItems = scoredItems\n  .slice()\n  .sort(function (a, b) {\n    return Number(b.json.pm_score || 0) - Number(a.json.pm_score || 0);\n  })\n  .slice(0, 8)\n  .map(function (item, fallbackIndex) {\n    return {\n      json: {\n        ...item.json,\n        should_deep_analyze: true,\n        debug_filter_fallback_used: true,\n        debug_filter_fallback_rank: fallbackIndex + 1,\n        debug_filter_fallback_reason: 'pm_score >= 3 的文章为 0 条，因此按 pm_score 从高到低返回前 8 条。'\n      }\n    };\n  });\n\nreturn fallbackItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        320
+      ],
+      "id": "7251c891-598b-453e-b8d7-742537b6079c",
+      "name": "Code in JavaScript6"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7,
+              "triggerAtMinute": 48
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        -160
+      ],
+      "id": "c3187ced-7542-408d-b98b-c56b4653b2f3",
+      "name": "Schedule Trigger",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "582c32a1-dddc-43ea-b664-a7b74f8f2625",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1968,
+        16
+      ],
+      "id": "8c96921c-7ae4-4f3c-b44d-c265623bae17",
+      "name": "Aggregate2"
+    },
+    {
+      "parameters": {
+        "jsCode": "var inputArticles = [];\n\nif (Array.isArray($json.articles)) {\n  inputArticles = $json.articles;\n} else if (Array.isArray($json.data)) {\n  inputArticles = $json.data;\n} else if (Array.isArray($json.items)) {\n  inputArticles = $json.items;\n} else {\n  inputArticles = $input.all().map(function (item) {\n    return item.json;\n  });\n}\n\nfunction safeArray(value) {\n  if (Array.isArray(value)) {\n    return value.filter(function (x) {\n      return Boolean(x);\n    });\n  }\n\n  if (typeof value === 'string' && value.trim()) {\n    return [value.trim()];\n  }\n\n  return [];\n}\n\nfunction safeText(value, fallback) {\n  if (fallback === undefined) fallback = '';\n\n  if (value === null || value === undefined) return fallback;\n\n  if (typeof value === 'string') {\n    var text = value.trim();\n    return text || fallback;\n  }\n\n  if (typeof value === 'number' || typeof value === 'boolean') {\n    return String(value);\n  }\n\n  return fallback;\n}\n\nfunction fieldText(value, fallback) {\n  if (fallback === undefined) fallback = '正文未披露';\n\n  if (value === null || value === undefined) return fallback;\n\n  if (typeof value === 'string') {\n    var text = value.trim();\n    return text || fallback;\n  }\n\n  if (typeof value === 'number' || typeof value === 'boolean') {\n    return String(value);\n  }\n\n  if (Array.isArray(value)) {\n    var list = value.filter(function (x) {\n      return Boolean(x);\n    });\n\n    if (!list.length) return fallback;\n\n    var out = [];\n\n    for (var i = 0; i < list.length; i++) {\n      var itemText = fieldText(list[i], '');\n      if (itemText) out.push(itemText);\n    }\n\n    return out.length ? out.join('\\n') : fallback;\n  }\n\n  if (typeof value === 'object') {\n    var evidence = safeText(value.evidence, '');\n    var analysis = safeText(value.analysis, '');\n\n    if (evidence && analysis) {\n      return '依据：' + evidence + '\\n分析：' + analysis;\n    }\n\n    if (analysis) return analysis;\n    if (evidence) return '依据：' + evidence;\n\n    var parts = [];\n\n    for (var k in value) {\n      if (Object.prototype.hasOwnProperty.call(value, k)) {\n        var v = value[k];\n\n        if (v === null || v === undefined) continue;\n        if (typeof v === 'string' && v.trim() === '') continue;\n\n        parts.push(k + '：' + fieldText(v, ''));\n      }\n    }\n\n    return parts.length ? parts.join('\\n') : fallback;\n  }\n\n  return fallback;\n}\n\nfunction oneLine(value, fallback) {\n  return fieldText(value, fallback).replace(/\\n/g, '；');\n}\n\nfunction formatList(arr) {\n  var list = safeArray(arr);\n\n  if (!list.length) return '- 无';\n\n  var out = [];\n\n  for (var i = 0; i < list.length; i++) {\n    out.push('- ' + fieldText(list[i], '无'));\n  }\n\n  return out.join('\\n');\n}\n\nfunction formatInlineList(arr) {\n  var list = safeArray(arr);\n\n  if (!list.length) return '无';\n\n  var out = [];\n\n  for (var i = 0; i < list.length; i++) {\n    var text = fieldText(list[i], '');\n    if (text) out.push(text);\n  }\n\n  return out.length ? out.join('、') : '无';\n}\n\nfunction getUrl(a) {\n  return safeText(a.url || a.link || a.original_url || '');\n}\n\nfunction getScore(a) {\n  var n = Number(\n    a.importance_score !== undefined &&\n    a.importance_score !== null &&\n    a.importance_score !== ''\n      ? a.importance_score\n      : a.pm_score\n  );\n\n  if (isNaN(n)) return 0;\n  return n;\n}\n\nfunction scoreLabel(score) {\n  var n = Number(score || 0);\n\n  if (n === 5) return '必读';\n  if (n === 4) return '值得深读';\n  if (n === 3) return '值得记录';\n  if (n === 2) return '一般参考';\n  if (n === 1) return '低价值';\n\n  return '无关';\n}\n\nfunction getTitle(a) {\n  return safeText(\n    a.title_cn ||\n    a.title ||\n    a.original_title ||\n    '',\n    '未命名文章'\n  );\n}\n\nfunction getOriginalSummary(a) {\n  return safeText(\n    a.executive_summary ||\n    a.description ||\n    a.summary ||\n    '',\n    '正文信息不足'\n  );\n}\n\nfunction getSummaryCn(a) {\n  var meta = a.analysis_meta || {};\n\n  return safeText(\n    meta.summary_cn ||\n    a.summary_cn ||\n    a.description_cn ||\n    a.executive_summary_cn ||\n    '',\n    ''\n  );\n}\n\nfunction getDisplaySummary(a) {\n  return safeText(\n    getSummaryCn(a) ||\n    getOriginalSummary(a),\n    '正文信息不足'\n  );\n}\n\nfunction getReason(a) {\n  return safeText(\n    a.importance_reason ||\n    a.pm_reason ||\n    '',\n    '未提供'\n  );\n}\n\nfunction getAction(a) {\n  return safeText(\n    a.pm_action ||\n    a.reason_to_skip_or_read ||\n    a.deep_analyze_reason ||\n    '',\n    '未提供'\n  );\n}\n\nfunction getCategory(a) {\n  return safeText(a.category || '其他', '其他');\n}\n\nfunction getSource(a) {\n  return safeText(\n    a.source ||\n    a.feed_source ||\n    a.feedTitle ||\n    '未提供',\n    '未提供'\n  );\n}\n\nfunction getPubDate(a) {\n  return safeText(\n    a.pubDate ||\n    a.isoDate ||\n    a.published ||\n    a.updated ||\n    '未提供',\n    '未提供'\n  );\n}\n\nfunction hasStage2(a) {\n  return Boolean(\n    a.analysis_meta ||\n    a.narrative_report ||\n    a.compact_signals ||\n    a.pm_actions ||\n    a.what_to_watch\n  );\n}\n\nfunction isSuspicious(a) {\n  if (safeText(a.link_consistency, '正常') === '存疑') return true;\n\n  var meta = a.analysis_meta || {};\n  var narrative = a.narrative_report || {};\n\n  var dataQuality = safeText(meta.data_quality, '');\n  var caution = safeText(narrative.caution, '');\n\n  if (dataQuality.indexOf('不一致') >= 0) return true;\n  if (dataQuality.indexOf('错配') >= 0) return true;\n  if (dataQuality.indexOf('存疑') >= 0) return true;\n  if (dataQuality.indexOf('人工核查') >= 0) return true;\n\n  if (caution.indexOf('不一致') >= 0) return true;\n  if (caution.indexOf('错配') >= 0) return true;\n  if (caution.indexOf('存疑') >= 0) return true;\n  if (caution.indexOf('人工核查') >= 0) return true;\n\n  return false;\n}\n\nfunction getAnalysisFit(a) {\n  var meta = a.analysis_meta || {};\n\n  return safeText(\n    meta.analysis_fit ||\n    a.analysis_fit ||\n    '',\n    '未提供'\n  );\n}\n\nfunction getEvidenceLevel(a) {\n  var meta = a.analysis_meta || {};\n\n  return safeText(\n    meta.evidence_level ||\n    a.evidence_level ||\n    '',\n    '未提供'\n  );\n}\n\nfunction getDataQuality(a) {\n  var meta = a.analysis_meta || {};\n\n  return safeText(\n    meta.data_quality ||\n    a.data_quality ||\n    '',\n    '未提供'\n  );\n}\n\nfunction getOneSentenceJudgment(a) {\n  var meta = a.analysis_meta || {};\n\n  return safeText(\n    meta.one_sentence_judgment ||\n    a.one_sentence_judgment ||\n    '',\n    '未提供'\n  );\n}\n\nfunction getShouldBeMainReport(a) {\n  var meta = a.analysis_meta || {};\n\n  if (meta.should_be_main_report === true) return true;\n  if (meta.should_be_main_report === false) return false;\n\n  return getScore(a) >= 3;\n}\n\nfunction getReasonIfNotMainReport(a) {\n  var meta = a.analysis_meta || {};\n\n  return safeText(\n    meta.reason_if_not_main_report || '',\n    '未提供'\n  );\n}\n\nfunction cleanArticleForOutput(a) {\n  var copy = {};\n\n  for (var k in a) {\n    if (Object.prototype.hasOwnProperty.call(a, k)) {\n      if (k === 'text') continue;\n      if (k === 'prompt_stage2') continue;\n      if (k === 'ollama_stage2_body') continue;\n      if (k === 'stage2_raw_response') continue;\n      if (k === 'debug_raw_stage2_preview') continue;\n      if (k.indexOf('debug_') === 0) continue;\n\n      copy[k] = a[k];\n    }\n  }\n\n  return copy;\n}\n\nfunction countByField(articles, getter) {\n  var map = {};\n\n  for (var i = 0; i < articles.length; i++) {\n    var key = getter(articles[i]);\n\n    if (!key) key = '未提供';\n\n    if (!map[key]) map[key] = 0;\n    map[key]++;\n  }\n\n  return map;\n}\n\nfunction renderCountMap(map) {\n  var keys = Object.keys(map);\n\n  if (!keys.length) return '- 无';\n\n  keys.sort(function (a, b) {\n    return map[b] - map[a];\n  });\n\n  var out = [];\n\n  for (var i = 0; i < keys.length; i++) {\n    out.push(\n      '- ' +\n      keys[i] +\n      '：' +\n      map[keys[i]] +\n      ' 篇'\n    );\n  }\n\n  return out.join('\\n');\n}\n\nfunction parsePubDate(value) {\n  var text = safeText(value, '');\n\n  if (!text || text === '未提供') return null;\n\n  var date = new Date(text);\n\n  if (isNaN(date.getTime())) return null;\n\n  return date;\n}\n\nfunction formatDateOnly(date) {\n  if (!date) return '';\n\n  var year = date.getFullYear();\n  var month = date.getMonth() + 1;\n  var day = date.getDate();\n\n  return year + '/' + month + '/' + day;\n}\n\nfunction renderSourceDistribution(articles) {\n  var sourceMap = {};\n\n  for (var i = 0; i < articles.length; i++) {\n    var article = articles[i];\n    var source = getSource(article);\n    var pubDate = parsePubDate(getPubDate(article));\n\n    if (!sourceMap[source]) {\n      sourceMap[source] = {\n        count: 0,\n        minDate: null,\n        maxDate: null\n      };\n    }\n\n    sourceMap[source].count++;\n\n    if (pubDate) {\n      if (\n        !sourceMap[source].minDate ||\n        pubDate.getTime() < sourceMap[source].minDate.getTime()\n      ) {\n        sourceMap[source].minDate = pubDate;\n      }\n\n      if (\n        !sourceMap[source].maxDate ||\n        pubDate.getTime() > sourceMap[source].maxDate.getTime()\n      ) {\n        sourceMap[source].maxDate = pubDate;\n      }\n    }\n  }\n\n  var sources = Object.keys(sourceMap);\n\n  if (!sources.length) return '- 无';\n\n  sources.sort(function (a, b) {\n    return sourceMap[b].count - sourceMap[a].count;\n  });\n\n  var out = [];\n\n  for (var j = 0; j < sources.length; j++) {\n    var sourceName = sources[j];\n    var item = sourceMap[sourceName];\n    var dateRange = '日期未提供';\n\n    if (item.minDate && item.maxDate) {\n      dateRange =\n        formatDateOnly(item.minDate) +\n        '--' +\n        formatDateOnly(item.maxDate);\n    }\n\n    out.push(\n      '- ' +\n      sourceName +\n      '：' +\n      item.count +\n      ' 篇  ' +\n      dateRange\n    );\n  }\n\n  return out.join('\\n');\n}\n\nfunction renderTopHighlights(articles) {\n  var highlights = [];\n\n  for (var i = 0; i < articles.length; i++) {\n    var a = articles[i];\n    var score = getScore(a);\n\n    if (score >= 4 || getShouldBeMainReport(a)) {\n      highlights.push(a);\n    }\n  }\n\n  highlights.sort(function (a, b) {\n    return getScore(b) - getScore(a);\n  });\n\n  if (!highlights.length) {\n    return '- 今日暂无明确 4 分以上必读新闻，建议重点看 3 分中与产品路线、Agent、企业落地相关的条目。';\n  }\n\n  var out = [];\n\n  for (var j = 0; j < highlights.length; j++) {\n    var item = highlights[j];\n\n    out.push(\n      '- ' +\n      getTitle(item) +\n      '｜' +\n      getScore(item) +\n      '/5｜' +\n      getSource(item) +\n      '｜' +\n      oneLine(\n        getOneSentenceJudgment(item),\n        getReason(item)\n      )\n    );\n  }\n\n  return out.join('\\n');\n}\n\nfunction renderSuspiciousList(articles) {\n  var out = [];\n\n  for (var i = 0; i < articles.length; i++) {\n    var a = articles[i];\n\n    if (!isSuspicious(a)) continue;\n\n    var meta = a.analysis_meta || {};\n    var narrative = a.narrative_report || {};\n\n    out.push(\n      '- ' +\n      getTitle(a) +\n      '｜原因：' +\n      oneLine(\n        meta.data_quality ||\n        narrative.caution ||\n        a.link_consistency ||\n        '需要人工核查',\n        '需要人工核查'\n      )\n    );\n  }\n\n  return out.length\n    ? out.join('\\n')\n    : '- 暂无明显需要人工核查的条目';\n}\n\nvar sorted = inputArticles.slice();\n\nsorted.sort(function (a, b) {\n  var scoreDiff = getScore(b) - getScore(a);\n\n  if (scoreDiff !== 0) return scoreDiff;\n\n  var aMain = getShouldBeMainReport(a) ? 1 : 0;\n  var bMain = getShouldBeMainReport(b) ? 1 : 0;\n\n  return bMain - aMain;\n});\n\nvar highCount = 0;\nvar recordCount = 0;\nvar lowCount = 0;\nvar suspiciousCount = 0;\nvar stage2Count = 0;\nvar mainReportCount = 0;\n\nfor (var c = 0; c < sorted.length; c++) {\n  var score = getScore(sorted[c]);\n\n  if (score >= 4) {\n    highCount++;\n  } else if (score === 3) {\n    recordCount++;\n  } else {\n    lowCount++;\n  }\n\n  if (isSuspicious(sorted[c])) suspiciousCount++;\n  if (hasStage2(sorted[c])) stage2Count++;\n  if (getShouldBeMainReport(sorted[c])) mainReportCount++;\n}\n\nvar sourceCountMap = countByField(sorted, function (a) {\n  return getSource(a);\n});\n\nvar categoryCountMap = countByField(sorted, function (a) {\n  return getCategory(a);\n});\n\nfunction renderHeader() {\n  return (\n    '# AI 科技新闻分析日报\\n\\n' +\n    '## 今日概览\\n\\n' +\n    '- 已写入邮件：' + sorted.length + ' 篇\\n' +\n    '- 深度分析完成：' + stage2Count + ' 篇\\n' +\n    '- 建议进入主报告：' + mainReportCount + ' 篇\\n' +\n    '- 重点 / 值得深读：' + highCount + ' 篇\\n' +\n    '- 值得记录：' + recordCount + ' 篇\\n' +\n    '- 低优先级 / 一般参考：' + lowCount + ' 篇\\n' +\n    '- 需要人工核查：' + suspiciousCount + ' 篇\\n\\n' +\n\n    '## 来源分布\\n\\n' +\n    renderSourceDistribution(sorted) + '\\n\\n'\n  );\n}\n\nfunction renderMetaBlock(a) {\n  var score = getScore(a);\n  var url = getUrl(a);\n\n  var statusParts = [];\n\n  if (getShouldBeMainReport(a)) {\n    statusParts.push('进入主报告');\n  } else {\n    statusParts.push('不进主报告');\n  }\n\n  if (hasStage2(a)) {\n    statusParts.push('已深度分析');\n  } else {\n    statusParts.push('仅初筛');\n  }\n\n  if (isSuspicious(a)) {\n    statusParts.push('需核查');\n  }\n\n  return (\n    '- 状态：' + statusParts.join(' / ') + '\\n' +\n    '- 评分：' + score + ' / 5（' + scoreLabel(score) + '）\\n' +\n    '- 分析匹配度：' +\n    getAnalysisFit(a) +\n    '｜证据等级：' +\n    getEvidenceLevel(a) +\n    '\\n' +\n    '- 分类：' +\n    getCategory(a) +\n    '｜次级分类：' +\n    formatInlineList(a.secondary_categories) +\n    '\\n' +\n    '- 来源：' +\n    getSource(a) +\n    '｜发布时间：' +\n    getPubDate(a) +\n    '\\n' +\n    '- 链接：' +\n    fieldText(url, '无') +\n    '\\n'\n  );\n}\n\nfunction renderStage2Block(a) {\n  var meta = a.analysis_meta || {};\n  var narrative = a.narrative_report || {};\n  var signals = a.compact_signals || {};\n\n  if (!hasStage2(a)) {\n    return (\n      '**简要判断**\\n' +\n      getAction(a) +\n      '\\n'\n    );\n  }\n\n  return (\n    '**一句话判断**\\n' +\n    fieldText(\n      meta.one_sentence_judgment,\n      getReason(a)\n    ) +\n    '\\n\\n' +\n\n    '- 主报告判断：' +\n    fieldText(\n      meta.reason_if_not_main_report,\n      '未提供'\n    ) +\n    '\\n\\n' +\n\n    '**发生了什么**\\n' +\n    fieldText(\n      narrative.overview,\n      getDisplaySummary(a)\n    ) +\n    '\\n\\n' +\n\n    '**为什么重要**\\n' +\n    fieldText(\n      narrative.why_it_matters,\n      fieldText(\n        meta.one_sentence_judgment,\n        '正文未披露'\n      )\n    ) +\n    '\\n\\n' +\n\n    '**产品启发**\\n' +\n    fieldText(\n      narrative.product_implication,\n      '正文未披露'\n    ) +\n    '\\n\\n' +\n\n    '**商业 / 战略信号**\\n' +\n    fieldText(\n      narrative.business_or_strategy_signal,\n      '正文未披露'\n    ) +\n    '\\n\\n' +\n\n    '**风险与限制**\\n' +\n    fieldText(\n      narrative.risk_and_limits,\n      '正文未披露'\n    ) +\n    '\\n\\n' +\n\n    '**PM 结论**\\n' +\n    fieldText(\n      narrative.pm_takeaway,\n      '正文未披露'\n    ) +\n    '\\n\\n' +\n\n    '**关键信号**\\n' +\n    '- 产品信号：' +\n    oneLine(\n      signals.product_signal,\n      '无明显产品信号'\n    ) +\n    '\\n' +\n\n    '- 竞品 / 生态信号：' +\n    oneLine(\n      signals.competitive_signal,\n      '无明显竞品信号'\n    ) +\n    '\\n' +\n\n    '- 企业采用信号：' +\n    oneLine(\n      signals.enterprise_adoption_signal,\n      '无明显企业采用信号'\n    ) +\n    '\\n' +\n\n    '- Agent / Workflow 信号：' +\n    oneLine(\n      signals.agent_or_workflow_signal,\n      '无明显 Agent 或 Workflow 信号'\n    ) +\n    '\\n' +\n\n    '- 定价 / 分发信号：' +\n    oneLine(\n      signals.pricing_or_distribution_signal,\n      '无明显定价或分发信号'\n    ) +\n    '\\n\\n' +\n\n    '**PM 动作建议**\\n' +\n    formatList(a.pm_actions) +\n    '\\n\\n' +\n\n    '**后续关注**\\n' +\n    formatList(a.what_to_watch) +\n    '\\n'\n  );\n}\n\nfunction renderArticle(a, index) {\n  var summaryCn = getSummaryCn(a);\n  var originalSummary = getOriginalSummary(a);\n\n  var summaryBlock = '';\n\n  if (summaryCn) {\n    summaryBlock +=\n      '**中文摘要**\\n' +\n      summaryCn +\n      '\\n\\n';\n  }\n\n  summaryBlock +=\n    '**原始 RSS 摘要**\\n' +\n    originalSummary +\n    '\\n\\n';\n\n  return (\n    '## ' +\n    (index + 1) +\n    '. ' +\n    getTitle(a) +\n    '\\n\\n' +\n\n    renderMetaBlock(a) +\n    '\\n' +\n\n    '**评分理由**\\n' +\n    getReason(a) +\n    '\\n\\n' +\n\n    '**初筛动作**\\n' +\n    getAction(a) +\n    '\\n\\n' +\n\n    summaryBlock +\n\n    renderStage2Block(a)\n  );\n}\n\nvar body = renderHeader();\n\nbody += '\\n---\\n\\n# 全部新闻整理\\n\\n';\n\nvar blocks = [];\n\nfor (var r = 0; r < sorted.length; r++) {\n  blocks.push(renderArticle(sorted[r], r));\n}\n\nbody += blocks.join('\\n\\n---\\n\\n');\n\nvar today = new Date().toLocaleDateString('zh-CN');\n\nvar outputArticles = [];\n\nfor (var oa = 0; oa < sorted.length; oa++) {\n  outputArticles.push(\n    cleanArticleForOutput(sorted[oa])\n  );\n}\n\nreturn [\n  {\n    json: {\n      article_count_raw: inputArticles.length,\n      article_count_email: sorted.length,\n      stage2_count: stage2Count,\n      main_report_count: mainReportCount,\n      high_count: highCount,\n      record_count: recordCount,\n      low_count: lowCount,\n      suspicious_count: suspiciousCount,\n      source_distribution: sourceCountMap,\n      category_distribution: categoryCountMap,\n      subject:\n        'AI科技新闻分析日报 - ' +\n        today +\n        ' (' +\n        sorted.length +\n        '篇，主报告' +\n        mainReportCount +\n        '篇，重点' +\n        highCount +\n        '篇，核查' +\n        suspiciousCount +\n        '篇)',\n      body: body,\n      articles_all: outputArticles\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        16
+      ],
+      "id": "c91624e0-633a-4ed2-8978-055089a05771",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "fromEmail": "myj27929@gmail.com",
+        "toEmail": "yajie.m@outlook.com",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{$json.body}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2432,
+        16
+      ],
+      "id": "a6d744f4-96e0-489c-b135-63b3dd96eaf0",
+      "name": "Send an Email1",
+      "webhookId": "42703459-8946-4dc6-ab0f-a6f5f4bf6d6b",
+      "credentials": {
+        "smtp": {
+          "id": "a57nP2eLa6ixUoKh",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "XML": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Aggregate2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request5": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript6": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send an Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "41f37dc2-fea4-43ce-ae5d-1d081284acf5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "771520b13efe70c31762e5a067ceb926f6440029e2e959e0afbd65e0fabfa3eb"
+  },
+  "nodeGroups": [],
+  "id": "UV5DR0hNUeESKiHY",
+  "tags": []
+}
