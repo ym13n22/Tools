@@ -7,13 +7,6 @@
 |AI RSS Intelligence|使用 n8n、Docker 和本地 Ollama 自动抓取、筛选并总结 AI 行业 RSS，生成中文日报|[查看项目](#ai-rss-intelligence--n8n--ollama)|
 |电子木鱼|Windows 桌面托盘程序，按键时播放木鱼音效，支持音量调节、暂停和直接运行 EXE|[查看项目](#电子木鱼--windows-桌面托盘程序)|
 
-## 项目导航
-
-* [AI RSS Intelligence — n8n + Ollama](#ai-rss-intelligence--n8n--ollama)
-* [电子木鱼 — Windows 桌面托盘程序](#电子木鱼--windows-桌面托盘程序)
-
-\---
-
 # AI RSS Intelligence — n8n + Ollama
 
 ## 项目介绍
